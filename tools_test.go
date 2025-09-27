@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"sync"
@@ -74,19 +75,22 @@ func TestTools_UploadFiles(t *testing.T) {
 		var testTools Tools
 		testTools.AllowedFileTypes = e.allowedTypes
 
-		UploadedFiles, err := testTools.UploadFiles(request, "./testdata/uploads/", e.renameFile)
+		uploadedFiles, err := testTools.UploadFiles(request, "./testdata/uploads/", e.renameFile)
 		if err != nil && !e.errorExpected {
 			t.Error("UploadFiles failed:", err)
 		}
 
 		if !e.errorExpected {
-			if _, err := os.Stat(fmt.Sprintf("./testdata/uploads/%s", UploadedFiles[0].NewFileName)); os.IsNotExist(err) {
+			if _, err := os.Stat(fmt.Sprintf("./testdata/uploads/%s", uploadedFiles[0].NewFileName)); os.IsNotExist(err) {
 				t.Errorf("%s: expected file to exist: %s", e.name, err.Error())
 			}
 
 			// clean up
-			_ = os.Remove(fmt.Sprintf("./testdata/uploads/%s", UploadedFiles[0].NewFileName))
+			//_ = os.Remove(fmt.Sprintf("./testdata/uploads/%s", uploadedFiles[0].NewFileName))
 		}
+
+		// Clean up "./testdata/uploads/" folder
+		_ = os.RemoveAll("./testdata/uploads/")
 
 		if !e.errorExpected && err != nil {
 			t.Errorf("%s: error expected no received", e.name)
@@ -188,5 +192,30 @@ func TestTools_Slugify(t *testing.T) {
 		if slug != e.expected && !e.errorExpected {
 			t.Errorf("%s: expected %s, got %s", e.name, e.expected, slug)
 		}
+	}
+}
+
+func TestTools_DownloadStaticFile(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/", nil)
+
+	var testTools Tools
+
+	testTools.DownloadStaticFile(rr, req, "./testdata/", "pic.jpg", "puppy.jpg")
+
+	res := rr.Result()
+	defer res.Body.Close()
+
+	if res.Header["Content-Length"][0] != "98827" {
+		t.Error("Content-Length header not set")
+	}
+
+	if res.Header["Content-Disposition"][0] != "attachment; filename=\"puppy.jpg\"" {
+		t.Error("Wrong Content-Disposition")
+	}
+
+	_, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Error(err)
 	}
 }
